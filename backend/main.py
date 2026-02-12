@@ -3,12 +3,6 @@ from fastapi import FastAPI , UploadFile, File
 from backend.pdf_utils import extract_text_from_pdf
 from backend.vector_store import chunk_text, create_vector_store
 from backend.rag import answer_question
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-
 
 app = FastAPI()
 
