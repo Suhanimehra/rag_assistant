@@ -1,34 +1,82 @@
-from fastapi import FastAPI , UploadFile, File
-# from fastapi import UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi.security import  OAuth2PasswordRequestForm
+from datetime import timedelta
 from backend.pdf_utils import extract_text_from_pdf
 from backend.vector_store import chunk_text, create_vector_store
 from backend.rag import answer_question
-
+from backend.auth import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, get_current_user, admin_required, fake_users_db
+from pydantic import BaseModel
 app = FastAPI()
 
 vector_store = None
 
 
-@app.get("/") # url milta h 
-def root(): # function to call the message 
-    return {"message": "RAG Assistant Backend Running"} # message in json 
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+    role: str = "user"
+
+@app.post("/register")
+def register(data: RegisterRequest):
+
+    if data.email in fake_users_db:
+        raise HTTPException(400, "User already exists")
+
+    fake_users_db[data.email] = {
+        "username": data.username,
+        "password": data.password,
+        "role": data.role
+    }
+
+    return {"message": "User registered successfully"}
 
 
-@app.post("/upload") #posting the upload request to the url
-async def upload_pdf(file: UploadFile = File(...)): # uploading the file and making it asynchronous(baki sar kaaam continue hote rahenge)
-    global vector_store
-    text = extract_text_from_pdf(file.file) # function use kiya h pdf se text extract karne ke liye
-    if not text:
-        return {"message": "No text found in the PDF"} # agar text nahi mila to ye message dega
-    #return {"message": "PDF text extracted", "length": len(text)} # response json format me
+@app.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    email = form_data.username
+    password = form_data.password
 
-    chunks = chunk_text(text)
-    vector_store = create_vector_store(chunks)
-    return {"message": "Document processed successfully"} 
+    user = fake_users_db.get(email)
+
+    if not user or user["password"] != password:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    access_token = create_access_token(
+        data={"sub": email, "role": user["role"]},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+
+    return {
+    "access_token": access_token,
+    "token_type": "bearer",
+    "role": user["role"]
+}
+
+
 
 @app.post("/ask")
-async def ask(question: str):
+def ask_question(question: str, user=Depends(get_current_user)):
+    global vector_store
+
     if vector_store is None:
-        return {"answer": "No document uploaded"}
+        raise HTTPException(400, "No PDF uploaded yet")
+
     answer = answer_question(vector_store, question)
+
     return {"answer": answer}
+
+@app.post("/upload")
+def upload_pdf(file: UploadFile = File(...), admin=Depends(admin_required)):
+    global vector_store
+
+    text = extract_text_from_pdf(file.file)
+    chunks = chunk_text(text)
+
+    vector_store = create_vector_store(chunks)
+
+    return {
+        "filename": file.filename,
+        "chunks": len(chunks),
+        "message": "PDF processed and stored"
+    }
