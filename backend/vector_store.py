@@ -12,7 +12,6 @@ def chunk_text(text): #text in chunks
     return chunks
 
 def create_vector_store(chunks): #vector store create karne ke liye
-    embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vector_store = FAISS.from_texts(chunks, embeddings)
     return vector_store
