@@ -1,9 +1,28 @@
 from pypdf import PdfReader
+import re
 
 
-def extract_text_from_pdf(pdf_file): #text extract usin the functions 
-    reader = PdfReader(pdf_file) # load pdf into memory 
+def clean_text(text):
+    # remove extra spaces
+    text = re.sub(r'\s+', ' ', text)
+
+    # remove weird characters like !! "
+    text = re.sub(r'[!"]+', '', text)
+
+    return text.strip()
+
+
+def extract_text_from_pdf(pdf_file):
+    reader = PdfReader(pdf_file)
     text = ""
+
     for page in reader.pages:
-        text += page.extract_text() + "\n" # extract text from each page and add to the final text
-    return text 
+        page_text = page.extract_text()
+
+        if page_text:  # avoid None pages
+            text += page_text + "\n"
+
+    # clean the extracted text
+    text = clean_text(text)
+
+    return text

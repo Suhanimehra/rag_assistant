@@ -106,7 +106,7 @@ if st.session_state.token:
         if uploaded_file:
             if st.button("Upload PDF"):
 
-                files = {"file": uploaded_file.getvalue()}
+                files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
 
                 response = requests.post(
                     f"{API_BASE}/upload",
@@ -139,8 +139,20 @@ if st.session_state.token:
             )
 
             if response.status_code == 200:
+
+                data = response.json()
+
                 st.subheader("Answer")
-                st.write(response.json()["answer"])
+
+                if "answer" in data:
+                    st.write(data["answer"])
+
+                elif "retrieved_context" in data:
+                    st.write(data["retrieved_context"])
+
+                else:
+                    st.write(data)
+
             else:
                 st.error(response.text)
 
