@@ -3,7 +3,7 @@ import requests
 
 API_BASE = "http://127.0.0.1:8000"
 
-st.set_page_config(page_title="RAG Assistant", layout="centered")
+st.set_page_config(page_title="RAG Assistant", layout="wide")
 
 # ---------------- SESSION ----------------
 
@@ -13,148 +13,160 @@ if "token" not in st.session_state:
 if "role" not in st.session_state:
     st.session_state.role = None
 
+if "current_chat" not in st.session_state:
+    st.session_state.current_chat = None
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 # ---------------- HEADER ----------------
 
-st.title("📄 Role-Based RAG Assistant")
+st.title("🤖 AI RAG Assistant")
 
-
-# ---------------- AUTH SECTION ----------------
+# ---------------- AUTH ----------------
 
 st.sidebar.title("Authentication")
 
-auth_mode = st.sidebar.radio("Select Mode", ["Login", "Register"])
-
-
-# ---------- REGISTER ----------
+auth_mode = st.sidebar.radio("Mode", ["Login", "Register"])
 
 if auth_mode == "Register":
-
     username = st.sidebar.text_input("Username")
     email = st.sidebar.text_input("Email")
     password = st.sidebar.text_input("Password", type="password")
     role = st.sidebar.selectbox("Role", ["user", "admin"])
 
     if st.sidebar.button("Register"):
-
-        response = requests.post(
-            f"{API_BASE}/register",
-            json={
-                "username": username,
-                "email": email,
-                "password": password,
-                "role": role
-            }
-        )
-
-        if response.status_code == 200:
-            st.sidebar.success("Registered successfully")
+        res = requests.post(f"{API_BASE}/register", json={
+            "username": username,
+            "email": email,
+            "password": password,
+            "role": role
+        })
+        st.sidebar.success("Registered") 
+        if res.status_code == 200:
+            st.sidebar.success("uploaded")
+        
         else:
-            st.sidebar.error(response.text)
-
-
-# ---------- LOGIN ----------
+            st.sidebar.error(res.text)
 
 if auth_mode == "Login":
-
     email = st.sidebar.text_input("Email")
     password = st.sidebar.text_input("Password", type="password")
 
     if st.sidebar.button("Login"):
-
-        response = requests.post(f"{API_BASE}/login",
-        data={
+        try:
+            res = requests.post(
+            f"{API_BASE}/login",
+            data={
             "username": email,
             "password": password
         }
-)
-
-        if response.status_code == 200:
-            data = response.json()
+    )
+        except requests.exceptions.ConnectionError:
+            st.sidebar.error("Backend not running ❌")
+            st.stop()
+            
+        if res.status_code == 200:
+            data = res.json()
             st.session_state.token = data["access_token"]
             st.session_state.role = data["role"]
-            st.sidebar.success("Logged in successfully")
+            st.rerun()
         else:
             st.sidebar.error("Invalid credentials")
-
-
-# ---------------- LOGOUT ----------------
-
-if st.session_state.token:
-    if st.sidebar.button("Logout"):
-        st.session_state.token = None
-        st.session_state.role = None
-        st.rerun()
-
 
 # ---------------- MAIN APP ----------------
 
 if st.session_state.token:
 
-    st.success(f"Logged in as **{st.session_state.role}**")
-
     headers = {"Authorization": f"Bearer {st.session_state.token}"}
 
-    # ---------- ADMIN UPLOAD ----------
+    # ---------- SIDEBAR: CHAT LIST ----------
+
+    st.sidebar.title("💬 Chats")
+
+    if st.sidebar.button("➕ New Chat", key="new_chat_btn"):
+        res = requests.get(f"{API_BASE}/conversations/start", headers=headers)
+        if res.status_code == 200:
+            chat = res.json()
+            st.session_state.current_chat = chat["conversation_id"]
+            st.session_state.messages = []
+            st.rerun()
+
+    # Load chats
+    res = requests.get(f"{API_BASE}/conversations/list", headers=headers)
+    if res.status_code == 200:
+        chats = res.json()
+        for chat in chats:
+            if st.sidebar.button(chat["title"], key=f"chat_{chat['id']}"):
+                st.session_state.current_chat = chat["id"]
+
+                # load messages
+                msg_res = requests.get(
+                    f"{API_BASE}/conversations/messages/{chat['id']}",
+                    headers=headers
+                )
+                if msg_res.status_code == 200:
+                    st.session_state.messages = msg_res.json()
+
+                st.rerun()
+
+    # ---------- ADMIN PANEL ----------
 
     if st.session_state.role == "admin":
+        st.sidebar.title("📂 Admin")
 
-        st.header("Upload PDF")
-
-        uploaded_file = st.file_uploader("Choose PDF", type=["pdf"])
-
+        uploaded_file = st.sidebar.file_uploader("Upload PDF", type=["pdf"])
         if uploaded_file:
-            if st.button("Upload PDF"):
-
+            if st.sidebar.button("Upload" , key="upload_btn"):
                 files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
+                res = requests.post(f"{API_BASE}/upload", headers=headers, files=files)
+                st.sidebar.success("Uploaded") if res.status_code == 200 else st.sidebar.error(res.text)
 
-                response = requests.post(
-                    f"{API_BASE}/upload",
+    # ---------- CHAT UI ----------
+
+    if st.session_state.current_chat:
+
+        st.subheader("💬 Chat")
+
+        # Display messages
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                st.markdown(f"🧑 **You:** {msg['message']}")
+            else:
+                st.markdown(f"🤖 **Bot:** {msg['message']}")
+
+        # Input
+        question = st.text_input("Type your message...")
+
+        if st.button("Send", key="send_btn"):
+            if question.strip():
+                res = requests.post(
+                    f"{API_BASE}/conversations/chat",
                     headers=headers,
-                    files=files
+                    params={
+                        "conversation_id": st.session_state.current_chat,
+                        "question": question
+                    }
                 )
 
-                if response.status_code == 200:
-                    st.success("PDF uploaded successfully")
+                if res.status_code == 200:
+                    answer = res.json()["answer"]
+
+                    st.session_state.messages.append({
+                        "role": "user",
+                        "message": question
+                    })
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "message": answer
+                    })
+
+                    st.rerun()
                 else:
-                    st.error(response.text)
+                    st.error(res.text)
 
-
-    # ---------- ASK QUESTION ----------
-
-    st.header("Ask Question")
-
-    question = st.text_input("Enter question")
-
-    if st.button("Ask"):
-
-        if question.strip() == "":
-            st.warning("Please enter question")
-        else:
-
-            response = requests.post(
-                f"{API_BASE}/ask",
-                headers=headers,
-                params={"question": question}
-            )
-
-            if response.status_code == 200:
-
-                data = response.json()
-
-                st.subheader("Answer")
-
-                if "answer" in data:
-                    st.write(data["answer"])
-
-                elif "retrieved_context" in data:
-                    st.write(data["retrieved_context"])
-
-                else:
-                    st.write(data)
-
-            else:
-                st.error(response.text)
+    else:
+        st.info("Start a new chat from sidebar")
 
 else:
-    st.info("Please login to continue")
+    st.info("Login to continue")

@@ -12,7 +12,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-#fake_users_db = {}
+
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
 
@@ -33,6 +33,7 @@ def get_current_user(token: str = Depends(oauth2_scheme),db: Session = Depends(g
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         role: str = payload.get("role")
+        user_id: int = payload.get("id")
 
         if email is None:
             raise credentials_exception
@@ -44,7 +45,7 @@ def get_current_user(token: str = Depends(oauth2_scheme),db: Session = Depends(g
     if user is None:
         raise credentials_exception
 
-    return {"email": email, "role": role}
+    return {"email": email, "role": role, "id": user_id}
 
 def admin_required(current_user=Depends(get_current_user)):
     if current_user["role"] != "admin":
