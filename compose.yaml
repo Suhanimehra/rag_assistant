@@ -1,0 +1,51 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: rag
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://rag:${POSTGRES_PASSWORD}@db:5432/rag
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      OLLAMA_URL: http://ollama:11434
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "python -m backend.init_db && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+  worker:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://rag:${POSTGRES_PASSWORD}@db:5432/rag
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+    command: ["python", "-m", "backend.worker"]
+    depends_on: [api]
+  frontend:
+    build: .
+    environment:
+      API_BASE: http://api:8000
+    command: ["streamlit", "run", "streamlit_app.py", "--server.address=0.0.0.0"]
+    ports:
+      - "127.0.0.1:8501:8501"
+    depends_on: [api]
+  redis:
+    image: redis:7-alpine
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_data:/root/.ollama
+volumes:
+  db_data:
+  ollama_data:

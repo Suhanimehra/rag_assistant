@@ -1,0 +1,10 @@
+{"question":"Which four types of analytics are listed in the data analyst roadmap?","documents":["data-analyst.pdf"],"answer":"Descriptive, diagnostic, predictive and prescriptive analytics"}
+{"question":"Which Excel lookup functions are listed in the data analyst roadmap?","documents":["data-analyst.pdf"],"answer":"VLOOKUP and HLOOKUP"}
+{"question":"Which tools are listed under Python package managers?","documents":["python.pdf"],"answer":"PyPI, Pip and Conda"}
+{"question":"Which advanced Python concepts appear under object-oriented programming?","documents":["python.pdf"],"answer":"Classes, inheritance, methods and dunder methods"}
+{"question":"What five sorting algorithms are included in the data structures roadmap?","documents":["datastructures-and-algorithms.pdf"],"answer":"Bubble, merge, insertion, quick and selection sort"}
+{"question":"What asymptotic notations are listed in the algorithms roadmap?","documents":["datastructures-and-algorithms.pdf"],"answer":"Big-O, Big-theta and Big-omega"}
+{"question":"What sampling and statistics topics are shown in the AI and data scientist roadmap?","documents":["ai-data-scientist.pdf"],"answer":"Statistics, CLT, hypothesis testing, probability and sampling"}
+{"question":"What methods are named under explicit binding in JavaScript?","documents":["javascript.pdf"],"answer":"call, apply and bind"}
+{"question":"Which declarations are listed under JavaScript variables?","documents":["javascript.pdf"],"answer":"var, let and const"}
+{"question":"Which JavaScript variable scope types are shown?","documents":["javascript.pdf"],"answer":"Block, function and global"}

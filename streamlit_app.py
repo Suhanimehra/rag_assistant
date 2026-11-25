@@ -1,172 +1,100 @@
-import streamlit as st
+import os
 import requests
+import streamlit as st
 
-API_BASE = "http://127.0.0.1:8000"
+API = os.getenv("API_BASE", "http://127.0.0.1:8000")
+st.set_page_config(page_title="Document Intelligence Assistant", layout="wide")
+st.title("Document Intelligence Assistant")
+for key, value in {"token": None, "role": None, "chat_id": None, "sources": []}.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
-st.set_page_config(page_title="RAG Assistant", layout="wide")
-
-# ---------------- SESSION ----------------
-
-if "token" not in st.session_state:
-    st.session_state.token = None
-
-if "role" not in st.session_state:
-    st.session_state.role = None
-
-if "current_chat" not in st.session_state:
-    st.session_state.current_chat = None
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# ---------------- HEADER ----------------
-
-st.title("🤖 AI RAG Assistant")
-
-# ---------------- AUTH ----------------
-
-st.sidebar.title("Authentication")
-
-auth_mode = st.sidebar.radio("Mode", ["Login", "Register"])
-
-if auth_mode == "Register":
-    username = st.sidebar.text_input("Username")
-    email = st.sidebar.text_input("Email")
-    password = st.sidebar.text_input("Password", type="password")
-    role = st.sidebar.selectbox("Role", ["user", "admin"])
-
-    if st.sidebar.button("Register"):
-        res = requests.post(f"{API_BASE}/register", json={
-            "username": username,
-            "email": email,
-            "password": password,
-            "role": role
-        })
-        st.sidebar.success("Registered") 
-        if res.status_code == 200:
-            st.sidebar.success("uploaded")
-        
-        else:
-            st.sidebar.error(res.text)
-
-if auth_mode == "Login":
-    email = st.sidebar.text_input("Email")
-    password = st.sidebar.text_input("Password", type="password")
-
-    if st.sidebar.button("Login"):
-        try:
-            res = requests.post(
-            f"{API_BASE}/login",
-            data={
-            "username": email,
-            "password": password
-        }
-    )
-        except requests.exceptions.ConnectionError:
-            st.sidebar.error("Backend not running ❌")
-            st.stop()
-            
-        if res.status_code == 200:
-            data = res.json()
-            st.session_state.token = data["access_token"]
-            st.session_state.role = data["role"]
+def call(method, path, **kwargs):
+    headers = {"Authorization": f"Bearer {st.session_state.token}"} if st.session_state.token else {}
+    try:
+        response = requests.request(method, API + path, headers=headers, timeout=180, **kwargs)
+        if response.status_code == 401 and st.session_state.token:
+            st.session_state.token = None
+            st.session_state.chat_id = None
             st.rerun()
-        else:
-            st.sidebar.error("Invalid credentials")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        st.error("Request failed. Check the server and try again.")
+        return None
 
-# ---------------- MAIN APP ----------------
-
-if st.session_state.token:
-
-    headers = {"Authorization": f"Bearer {st.session_state.token}"}
-
-    # ---------- SIDEBAR: CHAT LIST ----------
-
-    st.sidebar.title("💬 Chats")
-
-    if st.sidebar.button("➕ New Chat", key="new_chat_btn"):
-        res = requests.get(f"{API_BASE}/conversations/start", headers=headers)
-        if res.status_code == 200:
-            chat = res.json()
-            st.session_state.current_chat = chat["conversation_id"]
-            st.session_state.messages = []
-            st.rerun()
-
-    # Load chats
-    res = requests.get(f"{API_BASE}/conversations/list", headers=headers)
-    if res.status_code == 200:
-        chats = res.json()
-        for chat in chats:
-            if st.sidebar.button(chat["title"], key=f"chat_{chat['id']}"):
-                st.session_state.current_chat = chat["id"]
-
-                # load messages
-                msg_res = requests.get(
-                    f"{API_BASE}/conversations/messages/{chat['id']}",
-                    headers=headers
-                )
-                if msg_res.status_code == 200:
-                    st.session_state.messages = msg_res.json()
-
-                st.rerun()
-
-    # ---------- ADMIN PANEL ----------
-
-    if st.session_state.role == "admin":
-        st.sidebar.title("📂 Admin")
-
-        uploaded_file = st.sidebar.file_uploader("Upload PDF", type=["pdf"])
-        if uploaded_file:
-            if st.sidebar.button("Upload" , key="upload_btn"):
-                files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
-                res = requests.post(f"{API_BASE}/upload", headers=headers, files=files)
-                st.sidebar.success("Uploaded") if res.status_code == 200 else st.sidebar.error(res.text)
-
-    # ---------- CHAT UI ----------
-
-    if st.session_state.current_chat:
-
-        st.subheader("💬 Chat")
-
-        # Display messages
-        for msg in st.session_state.messages:
-            if msg["role"] == "user":
-                st.markdown(f"🧑 **You:** {msg['message']}")
+if not st.session_state.token:
+    mode = st.radio("Account", ["Login", "Register"], horizontal=True)
+    with st.form("account"):
+        username = st.text_input("Name") if mode == "Register" else ""
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.form_submit_button(mode):
+            if mode == "Register":
+                if call("POST", "/register", json={"username": username, "email": email, "password": password}):
+                    st.success("Account created. Please log in.")
             else:
-                st.markdown(f"🤖 **Bot:** {msg['message']}")
-
-        # Input
-        question = st.text_input("Type your message...")
-
-        if st.button("Send", key="send_btn"):
-            if question.strip():
-                res = requests.post(
-                    f"{API_BASE}/conversations/chat",
-                    headers=headers,
-                    params={
-                        "conversation_id": st.session_state.current_chat,
-                        "question": question
-                    }
-                )
-
-                if res.status_code == 200:
-                    answer = res.json()["answer"]
-
-                    st.session_state.messages.append({
-                        "role": "user",
-                        "message": question
-                    })
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "message": answer
-                    })
-
+                result = call("POST", "/login", data={"username": email, "password": password})
+                if result:
+                    st.session_state.token = result["access_token"]
+                    st.session_state.role = result["role"]
                     st.rerun()
-                else:
-                    st.error(res.text)
+    st.stop()
 
-    else:
-        st.info("Start a new chat from sidebar")
+with st.sidebar:
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+    if st.button("New chat"):
+        result = call("POST", "/conversations/start")
+        if result:
+            st.session_state.chat_id = result["conversation_id"]
+            st.session_state.sources = []
+            st.rerun()
+    for chat in call("GET", "/conversations/list") or []:
+        if st.button(chat["title"], key=f"chat-{chat['id']}"):
+            st.session_state.chat_id = chat["id"]
+            st.session_state.sources = []
+            st.rerun()
+    if st.session_state.role == "admin":
+        file = st.file_uploader("Add a document", type=["pdf","txt","md","csv"])
+        if file and st.button("Index document"):
+            with st.spinner("Extracting and indexing..."):
+                result = call("POST", "/upload", files={"file": (file.name, file.getvalue(), file.type)})
+                if result:
+                    st.success(f"Queued ingestion job {result['job_id']}")
+        if st.button("Refresh ingestion status"):
+            st.rerun()
+        for job in call("GET", "/ingest/jobs") or []:
+            st.caption(f"{job['filename']}: {job['status']}")
+    docs = call("GET", "/documents") or []
+    selected = st.multiselect("Search these documents (empty = all)", docs, format_func=lambda d: d["filename"])
+    if st.session_state.chat_id and st.button("Delete current chat"):
+        if call("DELETE", f"/conversations/delete/{st.session_state.chat_id}"):
+            st.session_state.chat_id = None
+            st.session_state.sources = []
+            st.rerun()
 
-else:
-    st.info("Login to continue")
+if not st.session_state.chat_id:
+    st.info("Start a new chat to explore the knowledge base.")
+    st.stop()
+for message in call("GET", f"/conversations/messages/{st.session_state.chat_id}") or []:
+    with st.chat_message(message["role"]):
+        st.markdown(message["message"])
+        if message.get("sources"):
+            with st.expander("Sources"):
+                for source in message["sources"]:
+                    st.caption(f"[{source['source_id']}] {source['filename']} — page {source['page'] or 'N/A'}")
+                    st.write(source["excerpt"])
+if question := st.chat_input("Ask a question about your documents"):
+    with st.spinner("Retrieving evidence and generating an answer..."):
+        result = call("POST", "/conversations/chat", json={"conversation_id": st.session_state.chat_id,
+            "question": question, "document_ids": [d["id"] for d in selected] or None})
+        if result:
+            st.session_state.sources = result["sources"]
+            st.rerun()
+if st.session_state.sources:
+    with st.expander("Retrieved evidence", expanded=True):
+        for source in st.session_state.sources:
+            st.write(f"[{source['source_id']}] {source['filename']} — page {source['page'] or 'N/A'}")
+            st.caption(source["excerpt"])
