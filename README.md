@@ -57,7 +57,9 @@ python -m backend.worker
 streamlit run streamlit_app.py
 ```
 
-Open http://localhost:8501, log in as the provisioned admin, upload the sample documents from `uploads/`, then wait for the workers to finish indexing. Register normal users separately.
+Open http://localhost:8501, log in as the provisioned admin, and navigate to Documents to upload sample files from `uploads/`. Refresh ingestion jobs until they complete, then use Chat to ask questions. Register normal users separately.
+
+The workspace includes searchable conversation history, document filters, individual message citations, response timing, ingestion status, document management and a System health view. Real-time token streaming and original PDF preview are not implemented by the current backend.
 
 API documentation: http://localhost:8000/docs.
 
