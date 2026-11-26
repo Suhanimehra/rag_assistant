@@ -86,32 +86,42 @@ def login_screen():
     _, center, _ = st.columns([1, 2, 1])
     with center:
         st.title("Document Intelligence")
-        st.caption("Ask questions, explore documents and trace answers back to their sources.")
         if st.session_state.notice:
-            st.info(st.session_state.notice)
-            st.session_state.notice = None
-        mode = st.radio("Account", ["Sign in", "Create account"], horizontal=True)
-        with st.form("account"):
-            username = st.text_input("Name") if mode == "Create account" else ""
-            email = st.text_input("Email")
+            st.info(st.session_state.pop("notice"))
+        signup = st.session_state.get("auth_view") == "signup"
+        st.header("Create your account" if signup else "Sign in to your workspace")
+        with st.form("signup_form" if signup else "signin_form", clear_on_submit=False):
+            name = st.text_input("Full name") if signup else ""
+            email = st.text_input("Email").strip()
             password = st.text_input("Password", type="password")
-            submit = st.form_submit_button(mode, type="primary", use_container_width=True)
+            confirm = st.text_input("Confirm password", type="password") if signup else password
+            submit = st.form_submit_button("Create account" if signup else "Sign in", type="primary", use_container_width=True)
         if submit:
-            if not email.strip() or not password or (mode == "Create account" and not username.strip()):
-                st.warning("Complete all the fields.")
-            elif mode == "Create account":
-                if len(password) < 12:
-                    st.warning("Use a password of at least 12 characters.")
-                elif call("POST", "/register", json={"username": username.strip(), "email": email.strip(), "password": password}):
-                    st.success("Account created. Select Sign in to continue.")
+            if not email or not password or (signup and not name.strip()):
+                st.warning("Complete all required fields.")
+            elif "@" not in email:
+                st.warning("Enter a valid email address.")
+            elif signup and len(password) < 12:
+                st.warning("Use at least 12 characters.")
+            elif signup and password != confirm:
+                st.warning("Passwords do not match.")
             else:
-                result = call("POST", "/login", data={"username": email.strip(), "password": password})
-                if result:
-                    st.session_state.token = result["access_token"]
-                    st.session_state.role = result["role"]
-                    st.session_state.email = email.strip()
+                with st.spinner("Creating account…" if signup else "Signing in…"):
+                    if signup:
+                        result = call("POST", "/register", json={"username": name.strip(), "email": email, "password": password})
+                    else:
+                        result = call("POST", "/login", data={"username": email, "password": password})
+                if result is not None:
+                    if signup:
+                        st.session_state.auth_view = "signin"
+                        st.session_state.notice = "Account created. Please sign in."
+                    else:
+                        st.session_state.clear()
+                        st.session_state.update(token=result["access_token"], role=result["role"], email=email, page="Chat")
                     st.rerun()
-        st.caption("Local RAG · PostgreSQL · Ollama")
+        if st.button("Already registered? Sign in" if signup else "New here? Create an account", use_container_width=True):
+            st.session_state.auth_view = "signin" if signup else "signup"
+            st.rerun()
 
 
 def new_chat():
@@ -127,11 +137,14 @@ if not st.session_state.token:
     st.stop()
 
 is_admin = st.session_state.role == "admin"
+allowed_pages = ["Chat", "Documents"] + (["System"] if is_admin else [])
+if st.session_state.page not in allowed_pages:
+    st.session_state.page = "Chat"
 
 with st.sidebar:
     st.subheader("Document Intelligence")
     st.caption("Your knowledge workspace")
-    st.radio("Workspace", ["Chat", "Documents", "System"], key="page", label_visibility="collapsed")
+    st.radio("Workspace", allowed_pages, key="page", label_visibility="collapsed")
     st.divider()
     if st.button("＋ New conversation", type="primary", use_container_width=True):
         new_chat()
@@ -163,9 +176,12 @@ if st.session_state.notice:
 
 page = st.session_state.page
 if page == "System":
+    if not is_admin:
+        st.error("Administrator access required.")
+        st.stop()
     st.title("System status")
     st.caption("Verify that the services are reachable before using the assistant.")
-    status = call("GET", "/health", timeout=5)
+    status = call("GET", "/system/status", timeout=5)
     if status:
         a, b = st.columns(2)
         a.metric("API", status.get("status", "Unknown").capitalize())

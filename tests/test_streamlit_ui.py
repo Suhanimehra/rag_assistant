@@ -45,8 +45,11 @@ class StreamlitTests(unittest.TestCase):
                                   {"role": "assistant", "message": "Sample answer [S1]", "sources": [source]}])
             return Response({"answer": "Sample answer [S1]", "sources": [source],
                              "retrieval_ms": 20, "generation_ms": 200, "insufficient_evidence": False})
-        if path == "/health":
-            return Response({"status": "healthy", "database": "connected"})
+        if path in ("/health", "/system/status"):
+            return Response({
+                "status": "healthy",
+                "database": "connected"
+        })
         raise AssertionError((method, path))
 
     def login(self):
