@@ -26,7 +26,3 @@ Thumbs.db
 .venv/
 .pytest_cache/
 .coverage
-
-# Local files excluded from GitHub
-/uploads/
-/rag_assistant/
