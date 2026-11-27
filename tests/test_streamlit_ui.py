@@ -69,10 +69,10 @@ class StreamlitTests(unittest.TestCase):
 
     def test_documents_and_system(self):
         self.login()
-        self.app.radio(key="page").set_value("Documents").run()
+        next(button for button in self.app.button if "Documents" in button.label).click().run()
         self.assertFalse(self.app.exception)
         self.assertEqual(len(self.app.dataframe), 2)
-        self.app.radio(key="page").set_value("System").run()
+        next(button for button in self.app.button if "System" in button.label).click().run()
         self.assertFalse(self.app.exception)
         self.assertEqual(len(self.app.metric), 2)
 

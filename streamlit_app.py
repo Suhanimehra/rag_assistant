@@ -713,7 +713,7 @@ def chat_page(chats, chats_result, docs, docs_result, doc_names):
         for message in messages:
             role = message.get("role")
             role = role if role in {"user", "assistant"} else "assistant"
-            with st.chat_message(role, avatar="🧑" if role == "user" else "✦"):
+            with st.chat_message(role, avatar="user" if role == "user" else "assistant"):
                 st.markdown(message.get("message", ""))
                 sources_panel(message.get("sources") or [])
         metrics = st.session_state.last_metrics.get(chat_id)
