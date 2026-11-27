@@ -23,15 +23,16 @@ def verify_password(password: str, stored: str) -> bool:
 def create_access_token(user: User) -> str:
     settings = get_settings()
     now = datetime.now(timezone.utc)
-    return jwt.encode({"sub": str(user.id), "iat": now, "exp": now + timedelta(minutes=settings.access_token_minutes)},
+    return jwt.encode({"sub": str(user.id), "ver": int(user.token_version or 0), "iat": now,
+                       "exp": now + timedelta(minutes=settings.access_token_minutes)},
                       settings.jwt_secret.get_secret_value(), algorithm="HS256")
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     try:
         claims = jwt.decode(token, get_settings().jwt_secret.get_secret_value(), algorithms=["HS256"],
-                            options={"require": ["sub", "exp", "iat"]})
+                            options={"require": ["sub", "ver", "exp", "iat"]})
         user = db.get(User, int(claims["sub"]))
-        if user is not None:
+        if user is not None and int(claims["ver"]) == int(user.token_version or 0):
             return user
     except (jwt.InvalidTokenError, ValueError, TypeError):
         pass

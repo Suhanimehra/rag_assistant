@@ -1,39 +1,40 @@
 services:
-  db:
-    image: pgvector/pgvector:pg16
+  api:
+    build:
+      context: .
+      network: host
     environment:
-      POSTGRES_USER: rag
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      POSTGRES_DB: rag
-    volumes:
-      - db_data:/var/lib/postgresql/data
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to your PostgreSQL/Supabase connection string}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      GROQ_API_KEY: ${GROQ_API_KEY:?Set GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      REDIS_URL: redis://redis:6379/0
+    command: ["sh", "-c", "python -m backend.init_db && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
       interval: 5s
       timeout: 5s
       retries: 20
-  api:
-    build: .
-    environment:
-      DATABASE_URL: postgresql+psycopg://rag:${POSTGRES_PASSWORD}@db:5432/rag
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
-      OLLAMA_URL: http://ollama:11434
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      db:
-        condition: service_healthy
-    command: ["sh", "-c", "python -m backend.init_db && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
     ports:
       - "127.0.0.1:8000:8000"
   worker:
-    build: .
+    build:
+      context: .
+      network: host
     environment:
-      DATABASE_URL: postgresql+psycopg://rag:${POSTGRES_PASSWORD}@db:5432/rag
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to your PostgreSQL/Supabase connection string}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      GROQ_API_KEY: ${GROQ_API_KEY:?Set GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      REDIS_URL: redis://redis:6379/0
     command: ["python", "-m", "backend.worker"]
-    depends_on: [api]
+    depends_on:
+      api:
+        condition: service_healthy
   frontend:
-    build: .
+    build:
+      context: .
+      network: host
     environment:
       API_BASE: http://api:8000
     command: ["streamlit", "run", "streamlit_app.py", "--server.address=0.0.0.0"]
@@ -42,10 +43,3 @@ services:
     depends_on: [api]
   redis:
     image: redis:7-alpine
-  ollama:
-    image: ollama/ollama
-    volumes:
-      - ollama_data:/root/.ollama
-volumes:
-  db_data:
-  ollama_data:
