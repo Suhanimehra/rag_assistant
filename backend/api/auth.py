@@ -36,6 +36,11 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
         raise HTTPException(401, "Invalid credentials")
     return {"access_token": create_access_token(user), "token_type": "bearer", "role": user.role}
 
+@router.get("/me")
+def me(user: User = Depends(get_current_user)):
+    return {"email": user.email, "username": user.username, "role": user.role}
+
+
 @router.post("/logout")
 def logout(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     user.token_version = int(user.token_version or 0) + 1

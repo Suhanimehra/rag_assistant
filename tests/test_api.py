@@ -72,6 +72,10 @@ class ApiTests(unittest.TestCase):
             self.assertNotEqual(user.password, "long-test-password")
             self.assertEqual(user.token_version, 0)
         self.assertEqual(self.client.get("/documents", headers=self.headers).status_code, 200)
+        profile = self.client.get("/me", headers=self.headers)
+        self.assertEqual(profile.status_code, 200)
+        self.assertEqual(profile.json()["email"], "test@example.com")
+        self.assertEqual(profile.json()["role"], "user")
 
     def test_chat_listing(self):
         self.assertEqual(self.client.post("/conversations/start", headers=self.headers).status_code, 201)

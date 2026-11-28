@@ -22,7 +22,9 @@ class StreamlitTests(unittest.TestCase):
         self.client = patch("requests.request", side_effect=self.request)
         self.client.start()
         self.addCleanup(self.client.stop)
-        self.app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "streamlit_app.py"))
+        self.app = AppTest.from_file(
+            str(Path(__file__).resolve().parents[1] / "frontend" / "app.py")
+        )
 
     def request(self, method, url, **kwargs):
         path = url.split(":8000", 1)[-1]
@@ -71,10 +73,14 @@ class StreamlitTests(unittest.TestCase):
         self.login()
         next(button for button in self.app.button if "Documents" in button.label).click().run()
         self.assertFalse(self.app.exception)
-        self.assertEqual(len(self.app.dataframe), 2)
+        # Ingestion jobs use a dataframe; the indexed collection is rendered as cards.
+        self.assertEqual(len(self.app.dataframe), 1)
+        self.assertTrue(any("sample.pdf" in markdown.value for markdown in self.app.markdown))
         next(button for button in self.app.button if "System" in button.label).click().run()
         self.assertFalse(self.app.exception)
-        self.assertEqual(len(self.app.metric), 2)
+        status_text = " ".join(markdown.value for markdown in self.app.markdown)
+        self.assertIn("Operational", status_text)
+        self.assertIn("Connected", status_text)
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     database_url: str
     jwt_secret: SecretStr = Field(min_length=32)
-    access_token_minutes: int = 60
+    # Sessions stay valid until the user signs out (or the token expires).
+    access_token_minutes: int = 60 * 24 * 30
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dimension: int = 384
     groq_api_key: SecretStr

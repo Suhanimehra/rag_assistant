@@ -53,14 +53,37 @@ In two more terminals (same virtual environment):
 
 ```bash
 python -m backend.worker
-streamlit run streamlit_app.py
+streamlit run frontend/app.py
 ```
 
 Open http://localhost:8501, log in as the provisioned admin, and navigate to Documents to upload sample files from `uploads/`. Refresh ingestion jobs until they complete, then use Chat to ask questions. Register normal users separately.
 
-The workspace includes searchable conversation history, document filters, individual message citations, response timing, ingestion status, document management and a System health view. Real-time token streaming and original PDF preview are not implemented by the current backend.
+Sign-in is kept in a first-party cookie for 30 days, so refreshing or reopening the tab does not sign you out; signing out revokes the token server-side and clears the cookie. The workspace includes searchable conversation history, document filters, individual message citations, response timing, ingestion status, document management and a System health view. Real-time token streaming and original PDF preview are not implemented by the current backend.
 
 API documentation: http://localhost:8000/docs.
+
+## Frontend layout
+
+The Streamlit client is split into a small package; `streamlit_app.py` remains as a compatibility launcher.
+
+```text
+frontend/
+├── app.py              # entry point: page config, auth gate, router
+├── core/
+│   ├── config.py       # API base URL, allowed upload types
+│   ├── state.py        # session defaults, notices, is_admin()
+│   ├── session.py      # persistent sign-in cookie and restore
+│   └── api.py          # API client (call, upload_documents)
+├── ui/
+│   ├── styles.py       # global CSS and colour tokens
+│   └── components.py   # topbar, metric cards, doc rows, source cards
+└── views/
+    ├── auth.py         # sign in and create account
+    ├── sidebar.py      # navigation, chat history, account
+    ├── chat.py         # conversation and document panel
+    ├── documents.py    # upload, ingestion jobs, remove document
+    └── system.py       # admin status
+```
 
 ## Docker Compose
 
@@ -101,6 +124,7 @@ BM25 statistics are computed within lexical candidates, not across the entire co
 |---|---|---|
 | POST | /register | Create normal user |
 | POST | /login | Obtain JWT |
+| GET | /me | Read the signed-in user's profile |
 | POST | /logout | Revoke the user's existing tokens |
 | POST | /upload | Queue document ingestion (admin) |
 | GET | /ingest/jobs | View recent ingestion jobs (admin) |
