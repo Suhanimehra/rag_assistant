@@ -1,11 +1,11 @@
-"""Left navigation: new conversation, history, pages, account."""
+"""Left navigation: brand, new conversation, pages, history, account."""
 from datetime import UTC, datetime
 
 import streamlit as st
 from core import session
 from core.api import call
 from core.state import is_admin
-from ui.components import escape, html_block, section
+from ui.components import escape, html_block, section, wordmark_html
 
 
 def start_new_chat():
@@ -23,21 +23,14 @@ def _nav_button(label, key, active, **state):
 
 def _bucket(chat) -> int:
     """0 today, 1 yesterday, 2 previous 7 days, 3 older."""
-    raw = chat.get("created_at")
     try:
-        when = datetime.fromisoformat(str(raw))
+        when = datetime.fromisoformat(str(chat.get("created_at")))
     except (TypeError, ValueError):
         return 0
     if when.tzinfo is None:
         when = when.replace(tzinfo=UTC)
     days = (datetime.now(UTC).date() - when.astimezone(UTC).date()).days
-    if days <= 0:
-        return 0
-    if days == 1:
-        return 1
-    if days < 7:
-        return 2
-    return 3
+    return 0 if days <= 0 else 1 if days == 1 else 2 if days < 7 else 3
 
 
 def _history(chats):
@@ -51,41 +44,13 @@ def _history(chats):
             html_block(f'<div class="history-label">{label}</div>')
             for chat in items:
                 title = (chat.get("title") or "Untitled").strip()
-                short = title[:32] + "…" if len(title) > 32 else title
-                active = (st.session_state.chat_id == chat["id"]
-                          and st.session_state.page == "Chat")
-                _nav_button(short, f"chat-{chat['id']}", active,
-                            chat_id=chat["id"], page="Chat")
+                short = title[:80]
+                active = st.session_state.chat_id == chat["id"] and st.session_state.page == "Chat"
+                _nav_button(short, f"chat-{chat['id']}", active, chat_id=chat["id"], page="Chat")
 
 
-def render(chats, chats_ok):
-    # Legacy blank threads carry the default title and only add noise.
-    chats = [c for c in chats if (c.get("title") or "").strip() != "New Chat"]
-    with st.sidebar:
-        if st.button("＋  New conversation", type="primary", width="stretch", key="sidebar_new_chat"):
-            start_new_chat()
-
-        st.text_input("Search conversations", placeholder="Search your chats",
-                      label_visibility="collapsed", key="chat_search")
-        section("Recent", len(chats) if chats_ok else None)
-        if not chats_ok:
-            html_block('<div class="sidebar-empty">Conversations are unavailable.</div>')
-        else:
-            needle = st.session_state.chat_search.casefold()
-            visible = [c for c in chats
-                       if needle in (c.get("title") or "Untitled").casefold()]
-            if visible:
-                _history(visible[:200])
-            elif needle:
-                html_block('<div class="sidebar-empty">Nothing matches that search.</div>')
-            else:
-                html_block('<div class="sidebar-empty">Your conversations will appear here.</div>')
-
-        section("Workspace")
-        pages = [("◈", "Chat"), ("▤", "Documents")] + ([("◎", "System")] if is_admin() else [])
-        for glyph, name in pages:
-            _nav_button(f"{glyph}   {name}", f"nav-{name}", st.session_state.page == name, page=name)
-
+def _account():
+    with st.container(key="sidebar-account"):
         email = st.session_state.email or ""
         html_block(
             f'<div class="user-card"><div class="avatar">{escape(email[:1].upper() or "?")}</div>'
@@ -100,3 +65,31 @@ def render(chats, chats_ok):
                 del st.query_params["chat"]
             st.session_state["notice"] = "You have been signed out."
             st.rerun()
+
+
+def render(chats, chats_ok):
+    chats = [c for c in chats if (c.get("title") or "").strip() != "New Chat"]
+    with st.sidebar:
+        html_block(f'<div class="sidebar-brand">{wordmark_html()}</div>')
+        if st.button("＋  New conversation", type="primary", width="stretch", key="sidebar_new_chat"):
+            start_new_chat()
+
+        pages = [("◈", "Chat"), ("▤", "Documents")] + ([("◎", "System")] if is_admin() else [])
+        for glyph, name in pages:
+            _nav_button(f"{glyph}   {name}", f"nav-{name}", st.session_state.page == name, page=name)
+
+        section("Recent", len(chats) if chats_ok else None)
+        st.text_input("Search conversations", placeholder="Search your chats",
+                      label_visibility="collapsed", key="chat_search")
+        if not chats_ok:
+            html_block('<div class="sidebar-empty">Conversations are unavailable.</div>')
+        else:
+            needle = st.session_state.chat_search.casefold()
+            visible = [c for c in chats if needle in (c.get("title") or "Untitled").casefold()]
+            if visible:
+                _history(visible[:200])
+            else:
+                html_block('<div class="sidebar-empty">'
+                           + ("Nothing matches that search." if needle else "Your conversations will appear here.")
+                           + '</div>')
+        _account()

@@ -49,7 +49,13 @@ python -m backend.create_admin
 uvicorn backend.main:app --reload
 ```
 
-In two more terminals (same virtual environment):
+`uvicorn backend.main:app --reload` serves only the API. To run the API, worker and UI together (one command, Ctrl+C stops all):
+
+```bash
+./dev.sh
+```
+
+Or start the remaining two services in separate terminals:
 
 ```bash
 python -m backend.worker

@@ -14,8 +14,7 @@ st.set_page_config(page_title="Document Intelligence", page_icon="📄",
 
 from core import session, state
 from core.api import call
-from ui import styles
-from ui.components import topbar
+from ui import layout, styles
 from views import auth, chat, documents, sidebar, system
 
 state.init()
@@ -30,11 +29,10 @@ if not session.restore():
     auth.render()
     st.stop()
 
-topbar(st.session_state.page or "Workspace")
-
 pages = ["Chat", "Documents"] + (["System"] if state.is_admin() else [])
 if st.session_state.page not in pages:
     st.session_state.page = "Chat"
+layout.inject(st.session_state.page == "Chat")
 
 chats_result = call("GET", "/conversations/list")
 chats = chats_result or []

@@ -142,3 +142,18 @@ def sources_panel(sources):
         st.caption("Each claim in the answer points back to one of these excerpts.")
         for source in sources:
             footnote(source)
+
+
+def scroll_to_bottom(selector: str = ".st-key-chat-body"):
+    """Keep the message list pinned to the newest message."""
+    import streamlit.components.v1 as components
+
+    script = (
+        "<script>(function(){try{var e=window.parent.document.querySelector('"
+        + selector + "');if(e){e.scrollTop=e.scrollHeight;}}catch(x){}})();</script>"
+    )
+    with st.container(key="scroll-anchor"):
+        if hasattr(st, "iframe"):
+            st.iframe(script, height=1)
+        else:
+            components.html(script, height=0)
