@@ -9,6 +9,7 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     password = Column(String, nullable=False)
     role = Column(String, nullable=False, default="user")
+    token_version = Column(Integer, nullable=False, default=0, server_default="0")
 
 class Document(Base):
     __tablename__ = "documents"

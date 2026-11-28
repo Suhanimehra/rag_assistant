@@ -1,11 +1,11 @@
 # Intelligent Document Assistant (Advanced Hybrid RAG)
 
-A local-inference document Q&A application using FastAPI, PostgreSQL/pgvector, Sentence Transformers, Ollama and Streamlit. Upgraded from the original PDF assistant without requiring a paid LLM API.
+A document Q&A application using FastAPI, PostgreSQL/pgvector, Sentence Transformers, Groq and Streamlit. Local embeddings keep document content off third-party embedding APIs; answer generation uses the Groq-hosted LLM.
 
 ## Features
 
 - Admin-managed shared knowledge base; ordinary users have private chat histories.
-- Argon2 password hashing, server-controlled roles, environment-supplied JWT secret and ownership checks.
+- Argon2 password hashing, server-controlled roles, environment-supplied JWT secret, token revocation on logout, login/registration/chat rate limiting, security headers and ownership checks.
 - Page-aware PDF extraction, TXT/Markdown/CSV support, configurable token-aware chunking, batched normalized embeddings, duplicate document detection.
 - Cosine vector retrieval + full-text candidate search, candidate-local BM25, reciprocal rank fusion, optional cross-encoder reranking and optional history-aware query rewriting.
 - Document filtering, insufficient-evidence responses, persisted source excerpts and page references, retrieval and generation latency.
@@ -26,13 +26,13 @@ flowchart TD
     DB --> R
     R --> F[BM25 + RRF]
     F --> X[Optional reranker]
-    X --> L[Ollama generation]
+    X --> L[Groq generation]
     L --> UI
 ```
 
 ## Local setup
 
-Use Python 3.11+ and a new PostgreSQL database with pgvector installed. Install Ollama separately and download Mistral.
+Use Python 3.11+ and a PostgreSQL database with pgvector. Supabase works out of the box: create a project, enable the `vector` extension, and copy the **Session pooler** connection string into `DATABASE_URL` (change the scheme to `postgresql+psycopg`). Create a Groq API key at https://console.groq.com/keys and ensure the machine can reach `api.groq.com`.
 
 ```bash
 python -m venv .venv
@@ -41,39 +41,66 @@ pip install -e .
 cp .env.example .env
 ```
 
-Edit `.env` to set your actual database URL and a **new random JWT secret**. Do not reuse credentials from the original repository. For example, generate a random secret locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+Edit `.env` to set your actual database URL, a **new random JWT secret**, and `GROQ_API_KEY`. Do not reuse credentials from the original repository. For example, generate a random secret locally with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 
 ```bash
-ollama pull mistral
 python -m backend.init_db
 python -m backend.create_admin
 uvicorn backend.main:app --reload
 ```
 
-In two more terminals (same virtual environment):
+`uvicorn backend.main:app --reload` serves only the API. To run the API, worker and UI together (one command, Ctrl+C stops all):
+
+```bash
+./dev.sh
+```
+
+Or start the remaining two services in separate terminals:
 
 ```bash
 python -m backend.worker
-streamlit run streamlit_app.py
+streamlit run frontend/app.py
 ```
 
 Open http://localhost:8501, log in as the provisioned admin, and navigate to Documents to upload sample files from `uploads/`. Refresh ingestion jobs until they complete, then use Chat to ask questions. Register normal users separately.
 
-The workspace includes searchable conversation history, document filters, individual message citations, response timing, ingestion status, document management and a System health view. Real-time token streaming and original PDF preview are not implemented by the current backend.
+Sign-in is kept in a first-party cookie for 30 days, so refreshing or reopening the tab does not sign you out; signing out revokes the token server-side and clears the cookie. The workspace includes searchable conversation history, document filters, individual message citations, response timing, ingestion status, document management and a System health view. Real-time token streaming and original PDF preview are not implemented by the current backend.
 
 API documentation: http://localhost:8000/docs.
 
+## Frontend layout
+
+The Streamlit client is split into a small package; `streamlit_app.py` remains as a compatibility launcher.
+
+```text
+frontend/
+├── app.py              # entry point: page config, auth gate, router
+├── core/
+│   ├── config.py       # API base URL, allowed upload types
+│   ├── state.py        # session defaults, notices, is_admin()
+│   ├── session.py      # persistent sign-in cookie and restore
+│   └── api.py          # API client (call, upload_documents)
+├── ui/
+│   ├── styles.py       # global CSS and colour tokens
+│   └── components.py   # topbar, metric cards, doc rows, source cards
+└── views/
+    ├── auth.py         # sign in and create account
+    ├── sidebar.py      # navigation, chat history, account
+    ├── chat.py         # conversation and document panel
+    ├── documents.py    # upload, ingestion jobs, remove document
+    └── system.py       # admin status
+```
+
 ## Docker Compose
 
-Copy `.env.example` to `.env`, set a URL-safe PostgreSQL password and a new JWT secret, then:
+Copy `.env.example` to `.env`, set `DATABASE_URL` (Supabase session-pooler URI or any pgvector PostgreSQL instance), a new JWT secret and `GROQ_API_KEY`, then:
 
 ```bash
 docker compose up -d --build
-docker compose exec ollama ollama pull mistral
 docker compose exec api python -m backend.create_admin
 ```
 
-The UI and API bind to loopback by default. The worker retrieves queued files from Postgres, deletes payloads after completion or terminal failure and can recover expired leases. Redis is enabled in the Compose setup. First-time model downloads can take time. CPU inference is supported but may be slow.
+Compose runs the API, worker, Streamlit frontend and a Redis cache container. The database is **external** and comes from `DATABASE_URL` (for example Supabase); there is no bundled database service, so `docker compose down -v` does not delete your data. The UI and API bind to loopback by default. The worker retrieves queued files from Postgres, deletes payloads after completion or terminal failure and can recover expired leases. First-time embedding-model downloads can take time; local CPU embedding inference is supported but may be slow. Generation is performed by Groq.
 
 ## Configuration
 
@@ -89,7 +116,10 @@ The UI and API bind to loopback by default. The worker retrieves queued files fr
 | ENABLE_HYBRID | true |
 | ENABLE_RERANKING | false |
 | ENABLE_QUERY_REWRITING | true |
-| OLLAMA_MODEL | mistral |
+| GROQ_API_KEY | required |
+| GROQ_MODEL | openai/gpt-oss-20b |
+| GROQ_BASE_URL | https://api.groq.com/openai/v1 |
+| GROQ_MAX_COMPLETION_TOKENS | 1024 |
 | REDIS_URL | optional |
 
 BM25 statistics are computed within lexical candidates, not across the entire corpus. PostgreSQL full-text search supplies independent lexical candidates. Fusion scores are ranking signals, not calibrated probabilities. Page references are retrieved evidence; the model may still make unsupported claims.
@@ -100,6 +130,8 @@ BM25 statistics are computed within lexical candidates, not across the entire co
 |---|---|---|
 | POST | /register | Create normal user |
 | POST | /login | Obtain JWT |
+| GET | /me | Read the signed-in user's profile |
+| POST | /logout | Revoke the user's existing tokens |
 | POST | /upload | Queue document ingestion (admin) |
 | GET | /ingest/jobs | View recent ingestion jobs (admin) |
 | GET | /documents | List shared indexed documents |
@@ -110,6 +142,7 @@ BM25 statistics are computed within lexical candidates, not across the entire co
 | POST | /conversations/chat | Ask question with optional document IDs |
 | DELETE | /conversations/delete/{id} | Delete owned chat |
 | GET | /health | Database connectivity |
+| GET | /system/status | Admin-only health view |
 
 ## Tests and evaluation
 
@@ -124,11 +157,11 @@ Run dense retrieval (`ENABLE_HYBRID=false`), hybrid retrieval and hybrid + reran
 
 ## Upgrade from v1
 
-**Use a new database for this version.** The original schema has no page metadata, chunk index or job table and stores passwords in plaintext. The bootstrap deliberately rejects the old chunk schema. Back up existing data, rotate the original credentials, provision new accounts with hashed passwords, and re-upload your original documents to regenerate page-aware normalized vectors. Existing chat data is not automatically migrated. Do not delete the original database.
+**Use a new database for this version.** The original schema has no page metadata, chunk index or job table and stores passwords in plaintext. The bootstrap deliberately rejects the old chunk schema. Back up existing data, rotate the original credentials, provision new accounts with hashed passwords, and re-upload your original documents to regenerate page-aware normalized vectors. Existing chat data is not automatically migrated. Do not delete the original database. `python -m backend.init_db` adds the `token_version` column used for logout/token revocation to an existing compatible database; tokens issued before that upgrade are rejected and users must sign in again.
 
 ## Before public deployment
 
-This is a production-oriented foundation, not a production certification. Validate PostgreSQL/pgvector queries, workers and Ollama against a real deployment; run representative load and RAG evaluation tests. Add TLS, reverse-proxy request limits/rate limiting, backups and monitoring, explicit versioned migrations, private document collections if required, OCR, response streaming, hierarchical summaries, stronger citation verification, and operational alerts. The administrator-uploaded corpus is intentionally shared with all authenticated users; upload only material intended for that audience.
+This is a production-oriented foundation, not a production certification. Validate PostgreSQL/pgvector queries, workers and Groq against a real deployment; run representative load and RAG evaluation tests. Login, registration and chat rate limiting is process-local; replace it with a shared Redis-backed limiter or enforce limits at the reverse proxy when running multiple API workers. Add TLS, reverse-proxy request limits, backups and monitoring, explicit versioned migrations, private document collections if required, OCR, response streaming, hierarchical summaries, stronger citation verification, and operational alerts. The administrator-uploaded corpus is intentionally shared with all authenticated users; upload only material intended for that audience.
 
 ## License
 

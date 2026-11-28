@@ -6,7 +6,9 @@ def embedding_model():
     from sentence_transformers import SentenceTransformer
     settings = get_settings()
     model = SentenceTransformer(settings.embedding_model)
-    if model.get_sentence_embedding_dimension() != settings.embedding_dimension or settings.embedding_dimension != 384:
+    get_dimension = getattr(model, "get_embedding_dimension", None)
+    dimension = get_dimension() if get_dimension else model.get_sentence_embedding_dimension()
+    if dimension != settings.embedding_dimension or settings.embedding_dimension != 384:
         raise ValueError("Embedding model must match the 384-dimensional database schema; migrate and reindex first.")
     return model
 

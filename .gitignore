@@ -7,14 +7,19 @@ __pycache__/
 
 # Virtual environment
 venv/
+.venv/
 .env
+
+# Editable install metadata
+*.egg-info/
 
 # FAISS index (optional: remove if you want to upload it)
 *.faiss
 *.pkl
 
-# Streamlit cache
-.streamlit/
+# Streamlit local state (keep the shared theme config)
+.streamlit/*
+!.streamlit/config.toml
 
 # VS Code
 .vscode/

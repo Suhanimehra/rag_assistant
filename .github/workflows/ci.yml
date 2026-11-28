@@ -9,5 +9,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install fastapi sqlalchemy pgvector pydantic-settings "pydantic[email]" PyJWT "pwdlib[argon2]" python-multipart httpx requests "streamlit>=1.41,<2"
-      - run: python -m compileall -q backend streamlit_app.py
+      - run: python -m compileall -q backend frontend streamlit_app.py
       - run: python -m unittest discover -s tests -v
